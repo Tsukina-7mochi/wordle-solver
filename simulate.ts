@@ -17,7 +17,7 @@ console.log('answers: ', answers.length);
 console.log('allowed guesses: ', guesses.length);
 console.log(`set answer to ${chalk.bgGreen.whiteBright(answer.toUpperCase())}`);
 
-const maxGuessNum = 100;
+const maxGuessNum = 6;
 let clue: clue = {
   possibleChars: [[...chars], [...chars], [...chars], [...chars], [...chars]],
   includedChars: []
@@ -33,7 +33,7 @@ for(let guessNum = 1; guessNum <= maxGuessNum; guessNum += 1) {
   console.log(`  included:`, clue.includedChars.map((charInfo) => `${charInfo.char}: [${charInfo.min}, ${charInfo.max}]`));
 
   // 次に入力する単語を決定
-  const guessedWord = guess(clue);
+  const guessedWord = guess(clue, (guessNum - 1) / maxGuessNum);
   if(typeof guessedWord !== 'string') {
     // 候補がない場合undefinedを返す
     console.log('Cannot select next input.');

@@ -12,7 +12,8 @@ const chars = 'abcdefghijklmnopqrstuvwxyz'.split('');
 
 
 
-const answer = answers[Math.floor(Math.random() * answers.length)];
+// const answer = answers[Math.floor(Math.random() * answers.length)];
+const answer = 'caulk';
 console.log('answers: ', answers.length);
 console.log('allowed guesses: ', guesses.length);
 console.log(`set answer to ${chalk.bgGreen.whiteBright(answer.toUpperCase())}`);

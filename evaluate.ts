@@ -1,10 +1,13 @@
 import { clue } from './types.ts';
+import { check } from './checker.ts';
+import { combineClues, convertResultIntoClue, wordMatchesToClue } from './util.ts';
 
 const chars = 'abcdefghijklmnopqrstuvwxyz'.split('');
 
 type evaluationFunc = ((
   word: string,
   possibleAnswers: Set<string>,
+  possibleGuesses: Set<string>,
   answers: Set<string>,
   guesses: Set<string>,
   gameProgress: number,
@@ -12,11 +15,13 @@ type evaluationFunc = ((
 ) => number);
 
 class Evaluator {
-  possibleAnswers: Parameters<evaluationFunc>[1];
-  readonly answers: Parameters<evaluationFunc>[2];
-  readonly guesses: Parameters<evaluationFunc>[3];
-  gameProgress: Parameters<evaluationFunc>[4];
-  readonly eval: ((word: Parameters<evaluationFunc>[0], clue: Parameters<evaluationFunc>[5]) => number);
+  possibleAnswers: Parameters<evaluationFunc>[1] = new Set();
+  possibleGuesses: Parameters<evaluationFunc>[2] = new Set();
+  readonly answers: Parameters<evaluationFunc>[3];
+  readonly guesses: Parameters<evaluationFunc>[4];
+  gameProgress: Parameters<evaluationFunc>[5] = 0;
+  readonly eval: ((word: Parameters<evaluationFunc>[0]) => number);
+  clue_: Parameters<evaluationFunc>[6] | null = null;
 
   /**
    * @param answers: 答えの語の集合
@@ -28,22 +33,31 @@ class Evaluator {
   constructor(
     answers: Evaluator['answers'],
     guesses: Evaluator['guesses'],
-    possibleAnswers: Evaluator['possibleAnswers'],
-    gameProgress: Evaluator['gameProgress'],
     evaluationFunc: evaluationFunc
   ) {
     this.answers = answers;
     this.guesses = guesses;
-    this.possibleAnswers = possibleAnswers;
-    this.gameProgress = gameProgress;
-    this.eval = (word: string, clue: clue) => evaluationFunc(
-      word,
-      this.possibleAnswers,
-      this.answers,
-      this.guesses,
-      this.gameProgress,
-      clue
-    );
+    this.eval = (word: string): number => {
+      if(this.clue_ === null) {
+        throw Error('Clue is not set to evaluator.');
+      }
+
+      return evaluationFunc(
+        word,
+        this.possibleAnswers,
+        this.possibleGuesses,
+        this.answers,
+        this.guesses,
+        this.gameProgress,
+        this.clue_
+      );
+    }
+  }
+
+  set clue(clue: clue) {
+    this.possibleAnswers = new Set(Array.from(this.answers).filter((word) => wordMatchesToClue(word, clue)));
+    this.possibleGuesses = new Set(Array.from(this.guesses).filter((word) => wordMatchesToClue(word, clue)));
+    this.clue_ = clue;
   }
 }
 
@@ -55,7 +69,8 @@ const localAdequacy: evaluationFunc = (
   _1,
   _2,
   _3,
-  _4
+  _4,
+  _5
 ): number => {
   // 文字ごとの分布を作成
   // [i]: (i+1)文字目の分布, Map<文字, その文字が含まれる数>
@@ -94,7 +109,8 @@ const globalAdequacy: evaluationFunc = (
   _1,
   _2,
   _3,
-  _4
+  _4,
+  _5
 ): number => {
   // 文字ごとの分布を作成
   // [i]: (i+1)文字目の分布, Map<文字, その文字がn個含まれる語の数を並べたリスト>
@@ -139,8 +155,59 @@ const globalAdequacy: evaluationFunc = (
   return score / (possibleAnswers.size * 5);
 }
 
+/** 次の候補の数の期待値が少ないほうが点数が大きくなる */
+const fewestNextCandidate: evaluationFunc = (
+  word: string,
+  possibleAnswers: Set<string>,
+  possibleGuesses: Set<string>,
+  _1,
+  _2,
+  _3,
+  clue: clue,
+): number => {
+  if(possibleAnswers.size === 0) {
+    return 0;
+  }
+
+  // 評価結果(CHAR_STATE[])に対応する次のあり得る答えの数をキャッシュ
+  const cachedNextCandidate = new Map<string, number>();
+  const resultToStr = (result: ReturnType<typeof check>) => result.join('');
+
+  let expectedNextCandidate = 0;
+  for(const answer of possibleAnswers) {
+    // 答えがanswerであるときを仮定
+    const result = check(word, answer);
+    const resultStr = resultToStr(result);
+    const cachedCandidate = cachedNextCandidate.get(resultStr);
+
+    if(typeof cachedCandidate === 'number') {
+      // キャッシュされた値を使用
+      expectedNextCandidate += cachedCandidate;
+    } else {
+      const nextClue = combineClues(clue, convertResultIntoClue(word, result));
+
+      // 次の候補の数を数える
+      let nextCandidate = 0;
+      for(const g of possibleGuesses) {
+        if(wordMatchesToClue(g, nextClue)) {
+          nextCandidate += 1;
+        }
+      }
+      cachedNextCandidate.set(resultStr, nextCandidate);
+      expectedNextCandidate += nextCandidate;
+    }
+  }
+
+  // 答えがansである確率はそれぞれ 1 / possibleAnswers.size
+  expectedNextCandidate /= possibleAnswers.size;
+
+  // 大きさを1に正規化し、候補数が少ないほど1に近い値を返すようにする
+  return 1 - (expectedNextCandidate / possibleAnswers.size);
+}
+
 export default Evaluator;
 export const evaluationFunc = {
   localAdequacy,
-  globalAdequacy
+  globalAdequacy,
+  fewestNextCandidate
 };

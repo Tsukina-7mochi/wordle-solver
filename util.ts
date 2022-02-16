@@ -104,9 +104,26 @@ const convertResultIntoClue = function(input: string, result: CHAR_STATE[]): clu
   }
 }
 
+const wordMatchesToClue = (word: string, clue: clue): boolean => {
+  // 各位置の文字がpossibleCharsに含まれなければfalseを返す
+  for(let i = 0; i < word.length; i++) {
+    if(!clue.possibleChars[i].includes(word[i])) {
+      return false;
+    }
+  }
+
+  // includedCharsのすべての文字を規定の数含んでいなければfalseを返す
+  if(!clue.includedChars.every((charInfo) => numInRange(charInfo.min, countCharInString(word, charInfo.char), charInfo.max))) {
+    return false;
+  }
+
+  return true;
+}
+
 export {
   countCharInString,
   numInRange,
   combineClues,
-  convertResultIntoClue
+  convertResultIntoClue,
+  wordMatchesToClue
 }
